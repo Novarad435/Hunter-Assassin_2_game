@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hunter Assassin 2 — Full Upgrade (health, faster player, graphics)</title>
+    <style>
+        #devModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 12px;
+            color: var(--white);
+            font-family: monospace;
+            z-index: 999;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+        }
+
+        .moving-text {
+            color: #fff;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            display: inline-block;
+            animation: moveText 12s linear infinite;
+        }
+
+        @keyframes moveText {
+            0% {
+                transform: translateX(100%);
+            }
+
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        #closeDev {
+            margin-top: 10px;
+        }
+
+        :root {
+            --bg: #071026;
+            --hud: #0b1220cc;
+            --panel: #0f1724;
+            --white: #e6e6e6;
+            --danger: #ff4d4d;
+            --diamond: #3ad7ff;
+            --knife: #111;
+            --accent: #ffd166;
+            --player: #3a8cff;
+            --enemy: #ff4d4d;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: linear-gradient(180deg, #061426, #031024);
+            font-family: Inter, system-ui, Segoe UI, Roboto, "Helvetica Neue", Arial;
+            color: var(--white)
+        }
+
+        .wrap {
+            display: grid;
+            grid-template-rows: 1fr auto;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            image-rendering: pixelated
+        }
+
+        .hud {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 10px 14px
+        }
+
+        .panel {
+            background: var(--hud);
+            backdrop-filter: blur(6px);
+            border-radius: 10px;
+            padding: 8px 12px;
+            display: flex;
+            gap: 14px;
+            align-items: center
+        }
+
+        .title {
+            font-weight: 600
+        }
+
+        .small {
+            font-size: 13px;
+            opacity: 0.95
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 6px 10px;
+            border-radius: 8px;
+            color: var(--white);
+            cursor: pointer
+        }
+
+        .center {
+            margin-left: auto
+        }
+
+        .health-bar {
+            width: 110px;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff7b7b, #ff4d4d);
+            width: 100%;
+            transition: width 0.15s linear;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <canvas id="game"></canvas>
+        <div class="hud">
+            <div class="panel">
+                <div>
+                    <div class="title">Hunter Assassin 2 — Full Upgrade</div>
+                    <div class="small">Faster player • 5 HP • Auto-heal • Cone vision • Bullets • Diamonds • Graphics
+                        upgraded</div>
+                </div>
+                <div style="width:1px;background:rgba(255,255,255,0.06);height:34px"></div>
+                <div class="small">
+                    Score: <span id="score">0</span> &nbsp;|&nbsp;
+                    Level: <span id="level">1</span> &nbsp;|&nbsp;
+                    Enemies: <span id="en">0</span> &nbsp;|&nbsp;
+                    Diamonds: <span id="dcol">0</span>/<span id="dtot">0</span>
+                </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;margin-left:12px;">
+                <div class="small">Health:</div>
+                <div class="health-bar">
+                    <div id="healthFill" class="health-fill"></div>
+                </div>
+                <div class="small" id="healthText">5/5</div>
+            </div>
+
+            <div class="center small">Move: Arrow/WASD — Space: Stealth — R: Restart</div>
+            <button class="btn" id="restart">Restart</button>
+            <button class="btn" id="devBtn">Developer Info</button>
+
+            <div id="devModal">
+                <div id="devContent"></div> <!-- Keep this empty -->
+            </div>
+
+
+        </div>
+    </div>
+
+    <script>
+        /* Hunter Assassin 2 — Full Upgrade
+           Features implemented:
+           - Player faster than bots
+           - Player HP = 5, auto-heal when not hit
+           - Bots have 45° cone vision and shoot
+           - Bullets reduce player's HP; a hit sets heal timer
+           - Player kills bots by moving onto them (melee)
+           - Diamond drop on kill; collect all to clear level
+        */
+        const devBtn = document.getElementById('devBtn');
+        const devModal = document.getElementById('devModal');
+        const devContent = document.getElementById('devContent');
+
+        devBtn.addEventListener('click', () => {
+            devContent.innerHTML = ''; // Ensure it's empty before adding
+
+            const blocks = [
+                'Personal Details: Balasubramani P — B.E. Electronics & Communication Engineering',
+                'Career Details: IoT Developer, Web Developer, AI Assistant Projects, PCB Designer',
+                'Projects & Tools: Hunter Assassin 2 Game, ESP32 IoT Modules, Node.js, KiCad, Python, JavaScript',
+                'Thanks for playing! Keep enjoying the game!'
+            ];
+
+            blocks.forEach(text => {
+                const div = document.createElement('div');
+                div.className = 'devBlock';
+                div.textContent = text;
+                devContent.appendChild(div);
+            });
+
+            devModal.style.display = 'block';
+
+            // Auto-hide after 10 seconds
+            setTimeout(() => { devModal.style.display = 'none'; }, 10000);
+        });
+
+
+        function draw() {
+            const W = canvas.width / devicePixelRatio;
+            const H = canvas.height / devicePixelRatio;
+            ctx.clearRect(0, 0, W, H);
+
+            const scaleX = W / (MAP_W * TILE);
+            const scaleY = H / (MAP_H * TILE);
+            const scale = Math.min(scaleX, scaleY);
+            const mapWpx = MAP_W * TILE * scale;
+            const mapHpx = MAP_H * TILE * scale;
+            const offsetX = (W - mapWpx) / 2;
+            const offsetY = (H - mapHpx) / 2;
+
+
+            // Draw map
+            for (let y = 0; y < MAP_H; y++) {
+                for (let x = 0; x < MAP_W; x++) {
+                    const px = offsetX + x * TILE * scale;
+                    const py = offsetY + y * TILE * scale;
+                    if (map[y][x] === 1) {
+                        ctx.fillStyle = '#071327';
+                        ctx.fillRect(px, py, TILE * scale, TILE * scale);
+                    } else {
+                        ctx.fillStyle = '#06121a';
+                        ctx.fillRect(px, py, TILE * scale, TILE * scale);
+                    }
+                }
+            }
+
+            // Draw diamonds
+            for (const d of diamonds) {
+                if (d.collected) continue;
+                const cx = offsetX + (d.x + 0.5) * TILE * scale;
+                const cy = offsetY + (d.y + 0.5) * TILE * scale;
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.beginPath();
+                ctx.moveTo(0, -TILE * scale * 0.18);
+                ctx.lineTo(TILE * scale * 0.13, 0);
+                ctx.lineTo(0, TILE * scale * 0.18);
+                ctx.lineTo(-TILE * scale * 0.13, 0);
+                ctx.closePath();
+                ctx.fillStyle = '#00ffff'; // cyan
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw enemies with vision cone
+            for (const e of enemies) {
+                const cx = offsetX + (e.x + 0.5) * TILE * scale;
+                const cy = offsetY + (e.y + 0.5) * TILE * scale;
+
+                // cone
+                const facingAngle = angleForDir(e.dir);
+                const coneRadius = TILE * scale * 7.5;
+                const coneHalf = (45 * Math.PI / 180) / 2;
+                ctx.beginPath();
+                ctx.fillStyle = e.state === 'chase' ? 'rgba(255,80,80,0.11)' : 'rgba(255,255,255,0.02)';
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, coneRadius, facingAngle - coneHalf, facingAngle + coneHalf);
+                ctx.closePath();
+                ctx.fill();
+
+                // enemy body
+                ctx.beginPath();
+                ctx.fillStyle = '#ff4d4d'; // red
+                ctx.arc(cx, cy, TILE * scale * 0.36, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw bullets
+            for (const b of bullets) {
+                const bx = offsetX + b.x * TILE * scale;
+                const by = offsetY + b.y * TILE * scale;
+                ctx.beginPath();
+                ctx.fillStyle = '#ffff00'; // yellow
+                ctx.arc(bx, by, TILE * scale * 0.08, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw player
+            const pcx = offsetX + (player.x + 0.5) * TILE * scale;
+            const pcy = offsetY + (player.y + 0.5) * TILE * scale;
+            // shadow
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.ellipse(pcx, pcy + TILE * scale * 0.28, TILE * scale * 0.4, TILE * scale * 0.18, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // body
+            ctx.beginPath();
+            ctx.fillStyle = '#3a8cff'; // blue
+            ctx.arc(pcx, pcy, TILE * scale * 0.38, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        let devicePixelRatio = window.devicePixelRatio || 1;
+        function resize() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = Math.floor(rect.width * devicePixelRatio);
+            canvas.height = Math.floor(rect.height * devicePixelRatio);
+            ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        }
+        window.addEventListener('resize', () => { devicePixelRatio = window.devicePixelRatio || 1; resize(); draw(); });
+        resize();
+
+        /* CONFIG */
+        const TILE = 28;
+        const GRID_W = 36;
+        const GRID_H = 20;
+        const MAP_W = GRID_W;
+        const MAP_H = GRID_H;
+
+        /* STATE */
+        let map = []; // 0 wall, 1 floor
+        let player = {
+            x: 0, y: 0, dir: 0,
+            hp: 5, maxHp: 5,
+            lastHitAt: -9999, // timestamp of last time hit
+            healAccum: 0
+        };
+        let enemies = []; // {id,x,y,dir,state,alertTimer,shootTimer,moveTimer}
+        let bullets = []; // {x,y,vx,vy,ttl}
+        let diamonds = []; // {x,y,collected}
+        let score = 0;
+        let level = 1;
+        let gameTick = 0;
+        let keys = {};
+        let lastMove = 0;
+        let gameOver = false;
+        let levelWon = false;
+
+        /* UI */
+        const scoreEl = document.getElementById('score');
+        const levelEl = document.getElementById('level');
+        const enEl = document.getElementById('en');
+        const dcolEl = document.getElementById('dcol');
+        const dtotEl = document.getElementById('dtot');
+        const healthFill = document.getElementById('healthFill');
+        const healthText = document.getElementById('healthText');
+        document.getElementById('restart').addEventListener('click', init);
+        document.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.code === 'Space') e.preventDefault();
+            if (e.key.toLowerCase() === 'r') init();
+        });
+        document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+        /* UTIL */
+        function inside(x, y) { return x >= 0 && x < MAP_W && y >= 0 && y < MAP_H; }
+        function randInt(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
+        function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+        /* MAP GEN */
+        function generateMap() {
+            map = new Array(MAP_H).fill(0).map(() => new Array(MAP_W).fill(0));
+            let cx = Math.floor(MAP_W / 2), cy = Math.floor(MAP_H / 2);
+            map[cy][cx] = 1;
+            const steps = MAP_W * MAP_H * 3;
+            for (let s = 0; s < steps; s++) {
+                const dir = randInt(0, 3);
+                if (dir === 0 && cy > 1) cy--;
+                if (dir === 1 && cx < MAP_W - 2) cx++;
+                if (dir === 2 && cy < MAP_H - 2) cy++;
+                if (dir === 3 && cx > 1) cx--;
+                map[cy][cx] = 1;
+                if (Math.random() < 0.005) { cx = randInt(1, MAP_W - 2); cy = randInt(1, MAP_H - 2); }
+            }
+            for (let r = 0; r < 20; r++) {
+                const rw = randInt(3, 7), rh = randInt(3, 6);
+                const rx = randInt(1, MAP_W - rw - 1), ry = randInt(1, MAP_H - rh - 1);
+                for (let yy = ry; yy < ry + rh; yy++) for (let xx = rx; xx < rx + rw; xx++) map[yy][xx] = 1;
+            }
+            for (let x = 0; x < MAP_W; x++) { map[0][x] = 0; map[MAP_H - 1][x] = 0; }
+            for (let y = 0; y < MAP_H; y++) { map[y][0] = 0; map[y][MAP_W - 1] = 0; }
+        }
+
+        /* Find a floor tile */
+        function findFloorTile() {
+            const candidates = [];
+            for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (map[y][x] === 1) candidates.push({ x, y });
+            return candidates[Math.floor(Math.random() * candidates.length)];
+        }
+
+        /* Spawn entities */
+        function spawnEntities() {
+            const enemyCount = Math.min(12, 2 + level * 2);
+            enemies = [];
+            diamonds = [];
+            bullets = [];
+            for (let i = 0; i < enemyCount; i++) {
+                const t = findFloorTile();
+                if (Math.abs(t.x - player.x) + Math.abs(t.y - player.y) < 6) { i--; continue; }
+                enemies.push({
+                    id: i,
+                    x: t.x,
+                    y: t.y,
+                    dir: randInt(0, 3),
+                    state: 'patrol',
+                    alertTimer: 0,
+                    shootTimer: 0,
+                    moveTimer: 0
+                });
+            }
+        }
+
+        /* Bresenham for LOS */
+        function clearLine(ax, ay, bx, by) {
+            let x0 = ax, y0 = ay, x1 = bx, y1 = by;
+            const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1;
+            let sy = y0 < y1 ? 1 : -1;
+            let err = dx - dy;
+            while (true) {
+                if (map[y0] && map[y0][x0] === 0) return false;
+                if (x0 === x1 && y0 === y1) break;
+                const e2 = err * 2;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+            return true;
+        }
+
+        /* Angle helpers */
+        function angleForDir(dir) {
+            if (dir === 0) return -Math.PI / 2;
+            if (dir === 1) return 0;
+            if (dir === 2) return Math.PI / 2;
+            if (dir === 3) return Math.PI;
+            return 0;
+        }
+        function angleBetween(ax, ay, bx, by) { return Math.atan2(by - ay, bx - ax); }
+        function angleDiff(a, b) { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+
+        /* Initialization */
+        function init() {
+            generateMap();
+            const p = findFloorTile();
+            player.x = p.x; player.y = p.y; player.dir = 0;
+            player.hp = player.maxHp = 5;
+            player.lastHitAt = -9999;
+            player.healAccum = 0;
+            score = 0; level = 1; gameOver = false; levelWon = false; gameTick = 0;
+            spawnEntities();
+            updateUI();
+        }
+        init();
+
+        /* Movement & melee kill (player kills enemy by moving onto its tile) */
+        function enemyIndexAt(x, y) { return enemies.findIndex(en => en.x === x && en.y === y); }
+
+        function tryMovePlayer(dx, dy) {
+            const nx = player.x + dx, ny = player.y + dy;
+            if (!inside(nx, ny)) return;
+            if (map[ny][nx] === 1) {
+                player.x = nx; player.y = ny;
+                if (dx === 1) player.dir = 1; if (dx === -1) player.dir = 3;
+                if (dy === 1) player.dir = 2; if (dy === -1) player.dir = 0;
+
+                // If there's an enemy on this tile: melee kill (player advantage)
+                const idx = enemyIndexAt(player.x, player.y);
+                if (idx !== -1) {
+                    killEnemy(idx, true);
+                }
+
+                // collect diamonds
+                collectDiamondAt(player.x, player.y);
+            }
+        }
+
+        /* Collect diamonds */
+        function collectDiamondAt(x, y) {
+            for (const d of diamonds) {
+                if (!d.collected && d.x === x && d.y === y) {
+                    d.collected = true;
+                    score += 300;
+                    player.healAccum += 0; // no auto-heal by collecting, but could be added
+                }
+            }
+            updateUI();
+        }
+
+        /* Kill enemy (drops a diamond) */
+        function killEnemy(index, melee = false) {
+            const en = enemies[index];
+            diamonds.push({ x: en.x, y: en.y, collected: false });
+            enemies.splice(index, 1);
+            score += melee ? 250 : 150;
+            updateUI();
+        }
+
+        /* Enemy sees player: 45° cone and radius */
+        function enemySeesPlayer(e) {
+            const ex = e.x + 0.5, ey = e.y + 0.5;
+            const px = player.x + 0.5, py = player.y + 0.5;
+            const dx = px - ex, dy = py - ey;
+            const dist = Math.hypot(dx, dy);
+            const radius = 7.5; // tiles
+            if (dist > radius) return false;
+            const toPlayerAngle = Math.atan2(dy, dx);
+            const facingAngle = angleForDir(e.dir);
+            const diff = Math.abs(angleDiff(toPlayerAngle, facingAngle));
+            const coneHalf = (45 * Math.PI / 180) / 2; // 22.5°
+            if (diff <= coneHalf && clearLine(e.x, e.y, player.x, player.y)) return true;
+            return false;
+        }
+
+        /* Enemy shoot */
+        function enemyShoot(e) {
+            const sx = e.x + 0.5, sy = e.y + 0.5;
+            const tx = player.x + 0.5, ty = player.y + 0.5;
+            const ang = Math.atan2(ty - sy, tx - sx);
+            const speed = 9.0; // tiles/sec
+            const vx = Math.cos(ang) * speed;
+            const vy = Math.sin(ang) * speed;
+            bullets.push({ x: sx, y: sy, vx, vy, ttl: 3.0 });
+        }
+
+        /* Update bullets: movement, collisions with walls, and hitting player (reduce hp) */
+        function updateBullets(dt, now) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+                b.ttl -= dt;
+                const bx = Math.floor(b.x), by = Math.floor(b.y);
+                if (!inside(bx, by) || (map[by] && map[by][bx] === 0) || b.ttl <= 0) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                const pdx = (player.x + 0.5) - b.x, pdy = (player.y + 0.5) - b.y;
+                const pdist = Math.hypot(pdx, pdy);
+                if (pdist < 0.5) {
+                    // player hit: reduce hp by 1, set lastHitAt
+                    player.hp = Math.max(0, player.hp - 1);
+                    player.lastHitAt = now;
+                    player.healAccum = 0;
+                    // update UI
+                    updateUI();
+                    bullets.splice(i, 1);
+                    if (player.hp <= 0) {
+                        gameOver = true;
+                    }
+                    continue;
+                }
+            }
+        }
+
+        /* Enemy movement & behavior: enemies slower than player */
+        function updateEnemies(dt) {
+            for (const e of enemies) {
+                // Timers
+                e.moveTimer -= dt;
+                e.shootTimer -= dt;
+
+                // Detect player
+                if (enemySeesPlayer(e)) {
+                    e.state = 'chase';
+                    e.alertTimer = 3.0; // seconds maintain chase after losing sight
+                } else {
+                    e.alertTimer -= dt;
+                    if (e.alertTimer <= 0 && e.state === 'chase') e.state = 'patrol';
+                }
+
+                // Movement: only move when moveTimer <=0 to make bots slower
+                if (e.moveTimer <= 0) {
+                    e.moveTimer = 0.28 + Math.random() * 0.18; // bots move every ~0.28-0.46s (player will be faster)
+                    if (e.state === 'chase') {
+                        // shoot occasionally
+                        if (e.shootTimer <= 0) {
+                            enemyShoot(e);
+                            e.shootTimer = 0.9 + Math.random() * 0.3;
+                        }
+                        const dx = Math.sign(player.x - e.x);
+                        const dy = Math.sign(player.y - e.y);
+                        const tryOrder = shuffle([[dx, 0], [0, dy], [dx, dy], [-dx, 0], [0, -dy]]);
+                        let moved = false;
+                        for (const t of tryOrder) {
+                            const nx = e.x + t[0], ny = e.y + t[1];
+                            if (inside(nx, ny) && map[ny][nx] === 1 && enemyIndexAt(nx, ny) === -1 && !(nx === player.x && ny === player.y)) {
+                                e.x = nx; e.y = ny; moved = true; break;
+                            }
+                        }
+                        if (!moved) {
+                            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                            const r = dirs[Math.floor(Math.random() * dirs.length)];
+                            const nx = e.x + r[0], ny = e.y + r[1];
+                            if (inside(nx, ny) && map[ny][nx] === 1 && enemyIndexAt(nx, ny) === -1 && !(nx === player.x && ny === player.y)) {
+                                e.x = nx; e.y = ny;
+                            }
+                        }
+                        // update facing toward player
+                        if (player.x > e.x) e.dir = 1;
+                        else if (player.x < e.x) e.dir = 3;
+                        else if (player.y > e.y) e.dir = 2;
+                        else if (player.y < e.y) e.dir = 0;
+                        // If enemy collides with player tile (rare), player dies (but player kills by stepping into enemy, so this is unlikely)
+                        if (e.x === player.x && e.y === player.y) {
+                            gameOver = true;
+                        }
+                    } else {
+                        // patrol random walk
+                        if (Math.random() < 0.35) {
+                            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                            const r = dirs[Math.floor(Math.random() * dirs.length)];
+                            const nx = e.x + r[0], ny = e.y + r[1];
+                            if (inside(nx, ny) && map[ny][nx] === 1 && enemyIndexAt(nx, ny) === -1 && !(nx === player.x && ny === player.y)) {
+                                e.x = nx; e.y = ny;
+                                if (r[0] === 1) e.dir = 1; if (r[0] === -1) e.dir = 3; if (r[1] === 1) e.dir = 2; if (r[1] === -1) e.dir = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /* Stealth kill attempt via Space (optional; moving onto enemy already kills) */
+        function attemptStealthKill() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                const dx = e.x - player.x, dy = e.y - player.y;
+                const dist = Math.abs(dx) + Math.abs(dy);
+                if (dist === 1) {
+                    // kill by contact (player advantage)
+                    killEnemy(i, true);
+                    return;
+                }
+            }
+        }
+
+        /* Auto-heal when not hit for a while */
+        const HEAL_COOLDOWN = 3.0; // seconds without hit before heal begins
+        const HEAL_INTERVAL = 1.2; // seconds per +1 hp
+        function updateAutoHeal(dt, now) {
+            if (player.hp <= 0) return;
+            if ((now - player.lastHitAt) >= HEAL_COOLDOWN) {
+                player.healAccum += dt;
+                if (player.healAccum >= HEAL_INTERVAL) {
+                    const heals = Math.floor(player.healAccum / HEAL_INTERVAL);
+                    player.healAccum -= heals * HEAL_INTERVAL;
+                    player.hp = Math.min(player.maxHp, player.hp + heals);
+                    updateUI();
+                }
+            } else {
+                // reset accumulation while in cooldown
+                player.healAccum = 0;
+            }
+        }
+
+        /* Update UI */
+        function updateUI() {
+            scoreEl.textContent = score;
+            levelEl.textContent = level;
+            enEl.textContent = enemies.length;
+            const totalDiamonds = diamonds.length;
+            const collected = diamonds.filter(d => d.collected).length;
+            dcolEl.textContent = collected;
+            dtotEl.textContent = totalDiamonds;
+            const pct = (player.hp / player.maxHp) * 100;
+            healthFill.style.width = pct + '%';
+            healthText.textContent = `${player.hp}/${player.maxHp}`;
+        }
+
+        /* Win condition */
+        function checkWinCondition() {
+            const totalDiamonds = diamonds.length;
+            const collected = diamonds.filter(d => d.collected).length;
+            if (enemies.length === 0 && totalDiamonds > 0 && collected === totalDiamonds) {
+                levelWon = true;
+                score += 500 * level;
+                setTimeout(() => {
+                    level++;
+                    generateMap();
+                    const p = findFloorTile();
+                    player.x = p.x; player.y = p.y;
+                    spawnEntities();
+                    diamonds = [];
+                    bullets = [];
+                    levelWon = false;
+                    updateUI();
+                }, 700);
+            }
+        }
+
+        /* Loop */
+        let lastTime = 0;
+        const PLAYER_MOVE_INTERVAL = 0.055; // seconds between allowed player tile moves -> faster than enemies
+        let playerMoveAccumulator = 0;
+
+        function loop(time) {
+            const dt = Math.min((time - lastTime) / 1000, 0.06);
+            lastTime = time;
+            const now = time / 1000;
+            if (!gameOver && !levelWon) {
+                gameTick += dt;
+                // Player movement handling using accumulator to make player faster
+                playerMoveAccumulator += dt;
+                if (playerMoveAccumulator >= PLAYER_MOVE_INTERVAL) {
+                    if (keys['arrowup'] || keys['w']) tryMovePlayer(0, -1);
+                    else if (keys['arrowdown'] || keys['s']) tryMovePlayer(0, 1);
+                    else if (keys['arrowleft'] || keys['a']) tryMovePlayer(-1, 0);
+                    else if (keys['arrowright'] || keys['d']) tryMovePlayer(1, 0);
+                    if (keys[' '] || keys['space']) { attemptStealthKill(); keys[' '] = false; keys['space'] = false; }
+                    playerMoveAccumulator = 0;
+                }
+
+                // update enemies, bullets, healing
+                updateEnemies(dt);
+                updateBullets(dt, now);
+                updateAutoHeal(dt, now);
+
+                // auto-collect diamonds if standing on them
+                collectDiamondAt(player.x, player.y);
+                updateUI();
+                checkWinCondition();
+            }
+
+            draw();
+
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.66)';
+                ctx.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 28px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText('You died — Press R to restart', canvas.width / devicePixelRatio / 2, canvas.height / devicePixelRatio / 2);
+            } else if (levelWon) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 28px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText('Level Cleared! Preparing next level...', canvas.width / devicePixelRatio / 2, canvas.height / devicePixelRatio / 2);
+                requestAnimationFrame(loop);
+            } else {
+                requestAnimationFrame(loop);
+            }
+        }
+        requestAnimationFrame(loop);
+
+        /* Draw */
+        function draw() {
+            const W = canvas.width / devicePixelRatio;
+            const H = canvas.height / devicePixelRatio;
+            ctx.clearRect(0, 0, W, H);
+
+            const scaleX = W / (MAP_W * TILE);
+            const scaleY = H / (MAP_H * TILE);
+            const scale = Math.min(scaleX, scaleY);
+            const mapWpx = MAP_W * TILE * scale;
+            const mapHpx = MAP_H * TILE * scale;
+            const offsetX = (W - mapWpx) / 2;
+            const offsetY = (H - mapHpx) / 2;
+
+            // Draw map
+            for (let y = 0; y < MAP_H; y++) {
+                for (let x = 0; x < MAP_W; x++) {
+                    const px = offsetX + x * TILE * scale;
+                    const py = offsetY + y * TILE * scale;
+                    if (map[y][x] === 1) {
+                        ctx.fillStyle = '#071327';
+                        ctx.fillRect(px, py, TILE * scale, TILE * scale);
+                        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+                        ctx.fillRect(px, py, TILE * scale, TILE * scale * 0.18);
+                    } else {
+                        ctx.fillStyle = '#06121a';
+                        ctx.fillRect(px, py, TILE * scale, TILE * scale);
+                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                        ctx.fillRect(px + TILE * scale * 0.05, py + TILE * scale * 0.05, TILE * scale * 0.9, TILE * scale * 0.9);
+                    }
+                }
+            }
+
+            // Diamonds
+            for (const d of diamonds) {
+                if (d.collected) continue;
+                const cx = offsetX + (d.x + 0.5) * TILE * scale;
+                const cy = offsetY + (d.y + 0.5) * TILE * scale;
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.beginPath();
+                ctx.moveTo(0, -TILE * scale * 0.18);
+                ctx.lineTo(TILE * scale * 0.13, 0);
+                ctx.lineTo(0, TILE * scale * 0.18);
+                ctx.lineTo(-TILE * scale * 0.13, 0);
+                ctx.closePath();
+                ctx.fillStyle = '#3ad7ff';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Enemies (vision cones + bodies)
+            for (const e of enemies) {
+                const cx = offsetX + (e.x + 0.5) * TILE * scale;
+                const cy = offsetY + (e.y + 0.5) * TILE * scale;
+
+                // cone
+                const facingAngle = angleForDir(e.dir);
+                const coneRadius = TILE * scale * 7.5;
+                const coneHalf = (45 * Math.PI / 180) / 2;
+                ctx.beginPath();
+                ctx.fillStyle = e.state === 'chase' ? 'rgba(255,80,80,0.11)' : 'rgba(255,255,255,0.02)';
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, coneRadius, facingAngle - coneHalf, facingAngle + coneHalf);
+                ctx.closePath();
+                ctx.fill();
+
+                // enemy body
+                ctx.beginPath();
+                ctx.fillStyle = '#ff4d4d';
+                ctx.arc(cx, cy, TILE * scale * 0.36, 0, Math.PI * 2);
+                ctx.fill();
+
+                // gun muzzle and eye
+                ctx.beginPath();
+                const muzzleX = cx + Math.cos(facingAngle) * TILE * scale * 0.5;
+                const muzzleY = cy + Math.sin(facingAngle) * TILE * scale * 0.5;
+                ctx.fillStyle = '#222';
+                ctx.fillRect(muzzleX - TILE * scale * 0.06, muzzleY - TILE * scale * 0.06, TILE * scale * 0.12, TILE * scale * 0.12);
+                ctx.beginPath();
+                ctx.fillStyle = '#fff';
+                const eyeX = cx + (e.dir === 1 ? 6 : e.dir === 3 ? -6 : 0) * scale;
+                const eyeY = cy + (e.dir === 2 ? 6 : e.dir === 0 ? -6 : 0) * scale;
+                ctx.arc(eyeX, eyeY, TILE * scale * 0.08, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Bullets
+            for (const b of bullets) {
+                const bx = offsetX + b.x * TILE * scale;
+                const by = offsetY + b.y * TILE * scale;
+                ctx.beginPath();
+                ctx.fillStyle = '#ffd166';
+                ctx.arc(bx, by, TILE * scale * 0.08, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Player
+            const pcx = offsetX + (player.x + 0.5) * TILE * scale;
+            const pcy = offsetY + (player.y + 0.5) * TILE * scale;
+            // shadow
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.ellipse(pcx, pcy + TILE * scale * 0.28, TILE * scale * 0.4, TILE * scale * 0.18, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // body
+            ctx.beginPath();
+            ctx.fillStyle = '#e6e6e6';
+            ctx.arc(pcx, pcy, TILE * scale * 0.38, 0, Math.PI * 2);
+            ctx.fill();
+            // knife direction
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 2 * scale;
+            ctx.beginPath();
+            const dir = player.dir;
+            const pdx = dir === 1 ? 1 : dir === 3 ? -1 : 0;
+            const pdy = dir === 2 ? 1 : dir === 0 ? -1 : 0;
+            ctx.moveTo(pcx, pcy);
+            ctx.lineTo(pcx + pdx * TILE * scale * 0.8, pcy + pdy * TILE * scale * 0.8);
+            ctx.stroke();
+        }
+
+        /* Click/touch support */
+        canvas.addEventListener('click', e => {
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+            const W = canvas.width / devicePixelRatio;
+            const H = canvas.height / devicePixelRatio;
+            const scaleX = W / (MAP_W * TILE);
+            const scaleY = H / (MAP_H * TILE);
+            const scale = Math.min(scaleX, scaleY);
+            const mapWpx = MAP_W * TILE * scale;
+            const mapHpx = MAP_H * TILE * scale;
+            const offsetX = (W - mapWpx) / 2;
+            const offsetY = (H - mapHpx) / 2;
+            const mx = Math.floor((cx - offsetX) / (TILE * scale));
+            const my = Math.floor((cy - offsetY) / (TILE * scale));
+            if (!inside(mx, my)) return;
+            const dx = mx - player.x, dy = my - player.y;
+            if (Math.abs(dx) + Math.abs(dy) === 1) {
+                tryMovePlayer(Math.sign(dx), Math.sign(dy));
+            } else {
+                attemptStealthKill();
+            }
+        });
+
+        /* Restart loop */
+        window.addEventListener('keydown', e => {
+            if (e.key.toLowerCase() === 'r') {
+                init();
+                lastTime = performance.now();
+                requestAnimationFrame(loop);
+            }
+        });
+
+        /* Start loop */
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
